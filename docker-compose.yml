@@ -72,7 +72,7 @@ services:
       # These settings override UI configuration for Docker Compose deployments.
       # Note: pip/local installs use localhost defaults and are unaffected.
       # ============================================================================
-      - LDR_LLM_OLLAMA_URL=http://ollama:11434
+      - LDR_LLM_OLLAMA_URL=http://host.docker.internal:11434
       - LDR_SEARCH_ENGINE_WEB_SEARXNG_DEFAULT_PARAMS_INSTANCE_URL=http://searxng:8080
 
       # ============================================================================
@@ -154,68 +154,30 @@ services:
     # entrypoint will fail with "Operation not permitted" on chown/chmod.
     # This is especially visible in restricted environments (Proxmox LXC).
     # ============================================================================
-    security_opt:
-      - "no-new-privileges:true"
-    cap_drop:
-      - ALL
-    cap_add:
-      - CHOWN        # chown -R ldruser:ldruser /data
-      - FOWNER       # chmod on files not owned by root (after chown to ldruser)
-      - DAC_OVERRIDE # mkdir in /home/ldruser (.config dir, mode 755 = no write for others)
-      - SETUID       # setpriv setuid() syscall to switch to ldruser
-      - SETGID       # setpriv setgid() syscall to switch group
+    # security_opt:
+    #   - "no-new-privileges:true"
+    # cap_drop:
+    #   - ALL
+    # cap_add:
+    #   - CHOWN        # chown -R ldruser:ldruser /data
+    #   - FOWNER       # chmod on files not owned by root (after chown to ldruser)
+    #   - DAC_OVERRIDE # mkdir in /home/ldruser (.config dir, mode 755 = no write for others)
+    #   - SETUID       # setpriv setuid() syscall to switch to ldruser
+    #   - SETGID       # setpriv setgid() syscall to switch group
     restart: unless-stopped
     depends_on:
-      ollama:
-        condition: service_healthy
-
       searxng:
         condition: service_started
 
 
-  ollama:
-    image: ollama/ollama:latest@sha256:8850b8b33936b9fb246e7b3e02849941f1151ea847e5fb15511f17de9589aea1
-    # Note: GPU acceleration disabled by default (CPU-only base)
-    # For NVIDIA GPU support, use docker-compose.gpu.override.yml
-    # For AMD GPU support (future), use docker-compose.amd.override.yml
-
-    container_name: ollama_service
-    # No custom entrypoint — uses the upstream image default (`ollama serve`).
-    # Considered-and-rejected: pre-pulling ${MODEL:-gemma3:12b} via
-    # scripts/ollama_entrypoint.sh on container start. That had three
-    # problems: (a) wasted ~5-10 min and ~7-8 GB on every fresh boot,
-    # (b) penalised users running LM Studio / OpenAI / llama.cpp who don't
-    # use ollama at all, and (c) coupled the compose to an opinionated
-    # default model. Users who choose ollama pull their model explicitly
-    # (`docker exec ollama_service ollama pull <model>`) or let LDR pull on
-    # first use. Healthcheck below probes the daemon (model-agnostic, #3885).
-    healthcheck:
-      test: [ "CMD", "ollama", "list" ]
-      interval: 10s
-      timeout: 5s
-      start_period: 30s
-      retries: 5
-    environment:
-      OLLAMA_KEEP_ALIVE: '30m'
-    volumes:
-      - ollama_data:/root/.ollama
-    networks:
-      - ldr-network
-    security_opt:
-      - "no-new-privileges:true"
-    cap_drop:
-      - ALL
-    # WARNING: Do NOT add ports: - "11434:11434" — Ollama has no authentication.
-    # Access is intentionally restricted to the ldr-network internal network.
-    restart: unless-stopped
 
   searxng:
     image: searxng/searxng:latest@sha256:6dd0dffc05a75d92bbacd858953b4e93b8f709403c3fb1fb8a33ca8fd02e40a4
     container_name: searxng
     networks:
       - ldr-network
-    security_opt:
-      - "no-new-privileges:true"
+    # security_opt:
+    #   - "no-new-privileges:true"
     # Note: no cap_drop here — upstream removed cap_drop: ALL from their
     # official compose in searxng/searxng-docker@31acd45 ("[fix] remove
     # security cap", 2025-05-20), and the new container template at
